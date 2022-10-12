@@ -1,1 +1,1 @@
-# HDR_imaging
+# HDR_Imaging
