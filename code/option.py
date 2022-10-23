@@ -13,23 +13,18 @@ def str2bool(v):
 parser = argparse.ArgumentParser()
 
 # Optimization specifications
-parser.add_argument('--lr', type=float, default=1e-4,
-                    help='learning rate')
+parser.add_argument('--lr', type=float, default=2e-4, help='learning rate')
 
 # Train specifications
-parser.add_argument('--num_epoch', type=int, default=100,
-                    help='number of epochs to train')
+parser.add_argument('--num_epoch', type=int, default=200, help='number of epochs to train')
 
-parser.add_argument('--input_size', type=int, default=256,
-                    help='input size')    
+parser.add_argument('--input_size', type=int, default=256, help='input size')    
 
-parser.add_argument('--batch_size', type=int, default=12,
-                    help='batch size')                             
+parser.add_argument('--batch_size', type=int, default=8, help='batch size')                             
 
-parser.add_argument('--is_noise', type=bool, default=False,
-                    help='noise on/off')   
+parser.add_argument('--is_noise', type=bool, default=True, help='noise on/off')   
 
-parser.add_argument('--noise_value', type=float, default=0.25,
+parser.add_argument('--noise_value', type=float, default=1.0,
                     help='noise scale')                          
 
 parser.add_argument('--is_log_scale', type=bool, default=True,
@@ -58,7 +53,11 @@ parser.add_argument('--hdrfusion', type=str2bool, default=True,
                     help='hdrfusion on/off')
 
 parser.add_argument('--transformer', type=str2bool, default=True,
-                    help='transformer on/off')                  
+                    help='transformer on/off')    
+
+# Comparison
+parser.add_argument('--comparison', action='store_true', default=False,
+                        help='keep_query')          
 
 # Note                  
 parser.add_argument('--name', type=str, default='noname',

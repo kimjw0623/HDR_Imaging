@@ -11,7 +11,7 @@ import imageio
 import shutil
 import metric
 from tqdm import tqdm
-from metric import color_psnr
+from metric import calc_psnr
 from metric import ssim
 from einops import rearrange
 

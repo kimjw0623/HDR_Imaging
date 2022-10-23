@@ -1,15 +1,6 @@
 __pycache__
 runs
-deghost/checkpoints/
-deghost/results/
 .history/
-old_ours/.history/
-old_ours/hakyeong/
-deblur/code/__pycache__
-deblur/code/runs
-deblur/code/trained_models
-deblur/code/test0/
-deblur/code/runs/
 .vscode/
 
 .DS_Store
