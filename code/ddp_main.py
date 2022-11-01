@@ -2,6 +2,7 @@ import os
 import argparse
 import datetime
 import json
+from pty import slave_open
 
 import shutil
 import glob
@@ -27,12 +28,13 @@ import warnings
 warnings.filterwarnings("error")
 
 import dataset
-import network_trans as network
+import network as network
 from metric import *
 from eval_test import eval_model
 from real_test import get_real_result
 import warnings 
 from util import ForkedPdb
+import imageio.v3 as imageio
 
 sys.path.append("..")
 
@@ -84,14 +86,15 @@ def main_worker(rank, world_size, args):
     train_dataset = dataset.Dataset(train_bayers, train_gts, train_dataset_dir, train_gt_dir, args) 
     test_dataset = dataset.Dataset(test_bayers, test_gts, test_dataset_dir, test_gt_dir, args, is_test=True)
     TrainSampler = DistributedSampler(train_dataset, shuffle=True, drop_last=True)
-    TestSampler = DistributedSampler(test_dataset, shuffle=False, drop_last=False)
+    TestSampler = DistributedSampler(test_dataset, shuffle=False, drop_last=True)
 
     # For DDP, shuffle should false. shuffle is done in Sampler
     training_generator = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=True,
                                                      num_workers=num_worker, pin_memory=True, sampler=TrainSampler)
     testing_generator = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, drop_last=False,
                                                      num_workers=num_worker, pin_memory=True, sampler=TestSampler)
-    
+    print(f'testlen:{len(testing_generator)}')
+
     torch.cuda.empty_cache()
     torch.cuda.set_device(rank)
 
@@ -101,14 +104,15 @@ def main_worker(rank, world_size, args):
     if args.is_resume:
         print('resume training')
         # Get best ckpt then load
-        order_list = os.listdir(args.result_dir + "/ckpt")
-        best_ckpt = natsort.natsorted(order_list)[-1]
-        checkpoint = torch.load(f'{args.result_dir}/ckpt/{best_ckpt}', map_location='cpu') # 'cpu': prevent memory leakage
+        #order_list = os.listdir(args.result_dir + "/ckpt")
+        #best_ckpt = natsort.natsorted(order_list)[0]
+        #print(best_ckpt)
+        checkpoint = torch.load(f'{args.result_dir}/ckpt/best_psnr_mu.pt', map_location='cpu') # 'cpu': prevent memory leakage
         net.load_state_dict(checkpoint['model_state_dict'])
         optimizer = optim.Adam(net.parameters(), lr=args.lr)
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         loss = checkpoint['loss']
-        best_psnr_mu = 36#checkpoint['psnr_mu']
+        best_psnr_mu = checkpoint['psnr_mu']
         epoch = checkpoint['epoch']
         iteration = int(epoch * train_dataset.__len__() / (world_size * batch_size))
         best_loss = loss
@@ -122,38 +126,40 @@ def main_worker(rank, world_size, args):
         iteration = 0
         if rank==0:
             make_dir(f'{args.result_dir}')
-            shutil.copyfile(f'./network_trans.py',f'{args.result_dir}/network_trans.py')
+            shutil.copyfile(f'./network.py',f'{args.result_dir}/network.py')
             make_dir(f'{args.result_dir}/tb')
             make_dir(f'{args.result_dir}/ckpt')
     
     writer = SummaryWriter(log_dir=f'{args.result_dir}/tb')
     train_state = True
     total_iteration = int(args.num_epoch * train_dataset.__len__() / (world_size * batch_size))
+    save_result = False ##########
 
     print(f'Train Start on GPU {rank}')
     while train_state:
-        net.train()
-        TrainSampler.set_epoch(epoch) # For random sampling differ by epoch
-        for data_group in training_generator:
-            data_cuda = [x.float().cuda(rank, non_blocking=True) for x in data_group[:2]]
-            input_bayer, gt_hdr = data_cuda
-            optimizer.zero_grad()
-            pred_hdr = net(input_bayer).permute(0,2,3,1)
-            loss = F.l1_loss(range_compressor_cuda(pred_hdr), range_compressor_cuda(gt_hdr))
+        if not save_result:
+            net.train()
+            TrainSampler.set_epoch(epoch) # For random sampling differ by epoch
+            for data_group in training_generator:
+                data_cuda = [x.float().cuda(rank, non_blocking=True) for x in data_group[:2]]
+                input_bayer, gt_hdr = data_cuda
+                optimizer.zero_grad()
+                pred_hdr = net(input_bayer).permute(0,2,3,1)
+                loss = F.l1_loss(range_compressor_cuda(pred_hdr), range_compressor_cuda(gt_hdr))
 
-            cur_psnr = batch_psnr(pred_hdr, gt_hdr, 1.0)
-            cur_psnr_mu = batch_psnr_mu(pred_hdr, gt_hdr, 1.0)
+                cur_psnr = batch_psnr(pred_hdr, gt_hdr, 1.0)
+                cur_psnr_mu = batch_psnr_mu(pred_hdr, gt_hdr, 1.0)
 
-            loss.backward()
-            optimizer.step()
-            iteration += 1
-            loss_sum = loss.detach().clone()
-            dist.all_reduce(loss_sum)
-            if rank==0:
-                print(f'[Train] Iter: {iteration:06d} / {total_iteration:06d} Loss: {loss_sum.item():06f} <{datetime.datetime.now()}>')
-                writer.add_scalar('loss/train', loss_sum.item(), iteration)
-                writer.add_scalar('PSNR/train', cur_psnr, iteration)
-                writer.add_scalar('PSNR-mu/train', cur_psnr_mu, iteration)
+                loss.backward()
+                optimizer.step()
+                iteration += 1
+                loss_sum = loss.detach().clone()
+                dist.all_reduce(loss_sum)
+                if rank==0:
+                    print(f'[Train] Iter: {iteration:06d} / {total_iteration:06d} Loss: {loss_sum.item():06f} <{datetime.datetime.now()}>')
+                    writer.add_scalar('loss/train', loss_sum.item(), iteration)
+                    writer.add_scalar('PSNR/train', cur_psnr, iteration)
+                    writer.add_scalar('PSNR-mu/train', cur_psnr_mu, iteration)
 
         with torch.no_grad():
             net.eval()
@@ -167,6 +173,13 @@ def main_worker(rank, world_size, args):
                 input_bayer, gt_hdr = data_cuda # input_bayer: (b h w 2)
                 pred_hdr = net(input_bayer).permute(0,2,3,1) # pred_hdr: (b h w c)
                 input_name = data_group[2][0]
+
+                if save_result:
+                    print(f"{input_name}")
+                    make_dir(f'./{args.result_dir}/result')
+                    imageio.imwrite(f'./{args.result_dir}/result/hdr_{input_name}.hdr', pred_hdr[0,:,:,:].detach().cpu().numpy())
+                    imageio.imwrite(f'./{args.result_dir}/result/tm_{input_name}.png',
+                                    np.uint8(np.clip(range_compressor_cuda(pred_hdr)[0,:,:,:].detach().cpu().numpy()*255.0, 0., 255.)))
 
                 # Add tensorboard image
                 if input_name in show_list:
@@ -189,39 +202,46 @@ def main_worker(rank, world_size, args):
                 cur_ssim_mu = calculate_ssim(mu_pred_hdr, mu_gt_hdr)
 
                 metric_list = torch.Tensor([cur_psnr, cur_ssim, cur_psnr_mu, cur_ssim_mu]).cuda(rank)
-                metric_sum_list = torch.add(metric_sum_list, metric_list)
+                metric_sum_list += metric_list
 
                 valid_loss_sum += valid_loss.detach().clone()
 
-            for item in pred_list:
-                visual_index = show_list.index(item[1])
-                tm_pred_image = tm_mu_law(np.clip(item[0][0,:,:,:].detach().cpu().squeeze(0).numpy(),0,1))
-                writer.add_image(f'pred{visual_index}', tm_pred_image, global_step=epoch, dataformats='HWC')
+            if not save_result:
+                for item in pred_list:
+                    visual_index = show_list.index(item[1])
+                    tm_pred_image = tm_mu_law(np.clip(item[0][0,:,:,:].detach().cpu().squeeze(0).numpy(),0,1))
+                    writer.add_image(f'pred{visual_index}', tm_pred_image, global_step=epoch, dataformats='HWC')
 
-            dist.reduce(valid_loss_sum, 0)
-            dist.reduce(metric_sum_list, 0)
+            dist.all_reduce(valid_loss_sum)
+            dist.all_reduce(metric_sum_list)
 
         # Show training status and tensorboard settings
         if rank==0:
-            valid_loss_sum = valid_loss_sum/len(test_bayers)
-            metric_sum_list = torch.div(metric_sum_list, len(test_bayers))
+            valid_loss_sum = valid_loss_sum/(len(testing_generator)*world_size)
+            metric_sum_list = torch.div(metric_sum_list, len(testing_generator)*world_size)
+            if save_result:
+                print(metric_sum_list)
+                print("successfully save result images")
+                dist.barrier()
+                dist.destroy_process_group()
+                return
+            else:
+                print(f'[Valid] Iter: {iteration:06d} Loss: {valid_loss_sum.item():06f} <{datetime.datetime.now()}>')
+                writer.add_scalar('loss/valid', valid_loss_sum.item(), iteration)
+                writer.add_scalar('PSNR/valid', metric_sum_list[0], iteration)
+                writer.add_scalar('PSNR-mu/valid', metric_sum_list[2], iteration)
+                writer.add_scalar('SSIM/valid', metric_sum_list[1], iteration)
+                writer.add_scalar('SSIM-mu/valid', metric_sum_list[3], iteration)
 
-            print(f'[Valid] Iter: {iteration:06d} Loss: {valid_loss_sum.item():06f} <{datetime.datetime.now()}>')
-            writer.add_scalar('loss/valid', valid_loss_sum.item(), iteration)
-            writer.add_scalar('PSNR/valid', metric_sum_list[0], iteration)
-            writer.add_scalar('PSNR-mu/valid', metric_sum_list[2], iteration)
-            writer.add_scalar('SSIM/valid', metric_sum_list[1], iteration)
-            writer.add_scalar('SSIM-mu/valid', metric_sum_list[3], iteration)
-
-            if metric_sum_list[2] > best_psnr_mu:
-                best_psnr_mu = metric_sum_list[2]
-                torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': best_loss,
-                    'psnr_mu' : best_psnr_mu,
-                },f'{args.result_dir}/ckpt/best_psnr_mu.pt')
+                if metric_sum_list[2] > best_psnr_mu:
+                    best_psnr_mu = metric_sum_list[2]
+                    torch.save({
+                        'epoch': epoch,
+                        'model_state_dict': net.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss': best_loss,
+                        'psnr_mu' : best_psnr_mu,
+                    },f'{args.result_dir}/ckpt/best_psnr_mu.pt')
         
         epoch += 1
         if epoch >= args.num_epoch: train_state=False
@@ -235,6 +255,7 @@ def main_worker(rank, world_size, args):
                     'model_state_dict': net.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': best_loss,
+                    'psnr_mu' : best_psnr_mu,
         },f'{args.result_dir}/ckpt/last.pt')
         
     dist.destroy_process_group()
@@ -282,9 +303,9 @@ def evaluate(args):
     dist.destroy_process_group()
     
 if __name__=='__main__':
-    if not args.is_train:
-        print('eval start')
-        evaluate(args)
-    else:
-        print('train start')
-        main(args)
+    # if not args.is_train:
+    #     print('eval start')
+    #     evaluate(args)
+    # else:
+    print('train start')
+    main(args)

@@ -448,7 +448,16 @@ class SpatialAttentionModule(nn.Module):
         f_cat = torch.cat((x1, x2), 1)
         att_map = torch.sigmoid(self.att2(self.relu(self.att1(f_cat))))
         return att_map
+    
+class Upscale(nn.Module):
+    def __init__(self, n_feat):
+        super(Upscale, self).__init__()
+        self.body = nn.Sequential(nn.Conv2d(n_feat, n_feat*4, kernel_size=3, stride=1, padding=1, bias=False),
+                                  nn.PixelShuffle(2))
 
+    def forward(self, x):
+        x = self.body(x)
+        return x
 
 class HDRTransformer(nn.Module):
     def __init__(self, rank ,fnum=32, ref_selection=0, num_blocks=[], keep_query=False, ffn_dconv=False, is_shared=True, add_level=False, is_local=False):
@@ -466,9 +475,18 @@ class HDRTransformer(nn.Module):
         self.demosaicing = True
         self.add_level = False
 
-        self.conv_x1 = nn.Conv2d(4, fnum, 3, 1, 1)
-        self.conv_x2 = nn.Conv2d(8, fnum, 3, 1, 1)
-        self.conv_x3 = nn.Conv2d(4, fnum, 3, 1, 1)
+        if False:
+            self.conv_x1 = nn.Conv2d(4, fnum, 3, 1, 1)
+            self.conv_x2 = nn.Conv2d(8, fnum, 3, 1, 1)
+            self.conv_x3 = nn.Conv2d(4, fnum, 3, 1, 1)
+        else:
+            self.conv_x1 = nn.Conv2d(8, fnum, 3, 1, 1)
+            self.conv_x2 = nn.Conv2d(16, fnum, 3, 1, 1)
+            self.conv_x3 = nn.Conv2d(8, fnum, 3, 1, 1)
+
+        self.upscale_x1 = Upscale(fnum)
+        self.upscale_x2 = Upscale(fnum)
+        self.upscale_x3 = Upscale(fnum)
 
         # Demosaicing
         if self.demosaicing:
@@ -524,7 +542,8 @@ class HDRTransformer(nn.Module):
         self.reduce_chan_level2 = nn.Conv2d(self.f1_num*4, self.f1_num*2, kernel_size=1, bias=False)
         self.reduce_chan_level1 = nn.Conv2d(self.f1_num*2, self.f1_num, kernel_size=1, bias=False)
         
-        self.conv_last = nn.Conv2d(3*self.f1_num, self.f1_num*2, 3, 1, 1)
+        self.conv_last = nn.Conv2d(3*self.f1_num, self.f1_num*3, 3, 1, 1)
+        self.conv_residual = nn.Conv2d(3*self.f1_num, self.f1_num*2, 3, 1, 1)
 
         #self.relu = nn.LeakyReLU(0.1)
         #self.norm = nn.LayerNorm(self.f1_num)
@@ -536,16 +555,31 @@ class HDRTransformer(nn.Module):
                                      nn.Conv2d(in_channels = self.f1_num, out_channels = 3, kernel_size = (3,3), padding = 'same'))
 
     def forward(self, x):
-        b,h,w = x.shape # x: (B, H, W)
-        # Channel-wise and exposure-wise subsampling: (b,h,w) -> (b,4,4,h/4,w/4)
-        sub_x = torch.zeros(b,4,4,h//4,w//4).cuda(self.rank)#.to(torch.device('cuda'))
+        # b,h,w = x.shape # x: (B, H, W)
+        # # Channel-wise and exposure-wise subsampling: (b,h,w) -> (b,4,4,h/4,w/4)
+        # sub_x = torch.zeros(b,4,4,h//4,w//4).cuda(self.rank)#.to(torch.device('cuda'))
+        # for level in range(4):
+        #     offset_h = level//2
+        #     offset_w = level%2
+        #     sub_x[:,level,0,:,:] = x[:,offset_h::4,offset_w::4]
+        #     sub_x[:,level,1,:,:] = x[:,offset_h::4,2+offset_w::4]
+        #     sub_x[:,level,2,:,:] = x[:,2+offset_h::4,offset_w::4]
+        #     sub_x[:,level,3,:,:] = x[:,2+offset_h::4,2+offset_w::4]
+
+        b,h,w,c = x.shape # x: (B H W 2)
+        x = rearrange(x, 'B H W C -> B C H W')
+
+        # Channel-wise and exposure-wise subsampling: (b,c,h,w) -> (b,c,4,4,h/4,w/4)
+        sub_x = torch.zeros(b,c,4,4,h//4,w//4).cuda(self.rank)#.to(torch.device('cuda'))
         for level in range(4):
             offset_h = level//2
             offset_w = level%2
-            sub_x[:,level,0,:,:] = x[:,offset_h::4,offset_w::4]
-            sub_x[:,level,1,:,:] = x[:,offset_h::4,2+offset_w::4]
-            sub_x[:,level,2,:,:] = x[:,2+offset_h::4,offset_w::4]
-            sub_x[:,level,3,:,:] = x[:,2+offset_h::4,2+offset_w::4]
+            sub_x[:,:,level,0,:,:] = x[:,:,offset_h::4,offset_w::4]
+            sub_x[:,:,level,1,:,:] = x[:,:,offset_h::4,2+offset_w::4]
+            sub_x[:,:,level,2,:,:] = x[:,:,2+offset_h::4,offset_w::4]
+            sub_x[:,:,level,3,:,:] = x[:,:,2+offset_h::4,2+offset_w::4]
+
+        sub_x = rearrange(sub_x,'B C E ch H W->B E (C ch) H W')
 
         x1 = sub_x[:,0,...] # x1: (B 4 H/4 W/4)
         x3 = sub_x[:,3,...]
@@ -555,8 +589,13 @@ class HDRTransformer(nn.Module):
         f2 = self.conv_x2(x2)
         f3 = self.conv_x3(x3)
 
-        x = torch.stack((f1, f2, f3), dim=1)
+        res_f1 = self.upscale_x1(f1)
+        res_f2 = self.upscale_x2(f2)
+        res_f3 = self.upscale_x3(f3)
+        res_f = torch.stack((res_f1, res_f2, res_f3), dim=1)
 
+        x = torch.stack((f1, f2, f3), dim=1)
+        
         # Demosaicing
         # TODO: seperate demosaic module?
         x = rearrange(x, 'B E C H W->(B E) C H W', E = 3, C = self.f1_num)
@@ -569,7 +608,7 @@ class HDRTransformer(nn.Module):
         else:
             x = self.sr_deconv(x)
         x = rearrange(x, '(B E) C H W -> B E C H W', E = 3)
-
+        
         # HDR imaging (or put as input)
         # x[:,1,...] = x[:,1,...]/4.0
         # x[:,1,...] = x[:,1,...]/16.0
@@ -619,6 +658,9 @@ class HDRTransformer(nn.Module):
 
         # HDR reconstruction
         x = self.conv_last(rearrange(x + x_scale21, 'B E C H W -> B (E C) H W'))
+        x = rearrange(x, 'B (E C) H W->B E C H W', E=3)
+        # print(x.shape,res_f.shape)
+        x = self.conv_residual(rearrange(x + res_f, 'B E C H W -> B (E C) H W'))
         x = self.upscale(x)
         x = torch.sigmoid(x)
 
