@@ -59,6 +59,10 @@ parser.add_argument('--transformer', type=str2bool, default=True,
 parser.add_argument('--comparison', action='store_true', default=False,
                         help='keep_query')          
 
+# Burst
+parser.add_argument('--burst', action='store_true', default=False,
+                        help='keep_query')   
+
 # Note                  
 parser.add_argument('--name', type=str, default='noname',
                     help='note for model') 

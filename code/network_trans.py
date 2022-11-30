@@ -672,14 +672,7 @@ class HDRTransformer(nn.Module):
         f1 = self.upscale_x1(self.conv_x1(x1)) # f1: (B 60 H/2 W/2)
         f2 = self.upscale_x2(self.conv_x2(torch.cat((sub_x[:,1,...],sub_x[:,2,...]),dim=1)))
         f3 = self.upscale_x3(self.conv_x3(x3))
-
         
-        
-
-        # f1 = self.conv_f1(x1)
-        # f2 = self.conv_f2(x2)
-        # f3 = self.conv_f3(x3)
-
         ################################################################
 
         # spatial feature attention 

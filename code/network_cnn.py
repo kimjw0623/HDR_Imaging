@@ -53,7 +53,6 @@ class AHDR(nn.Module):
         nFeat = 64
         growthRate = 32
         self.rank = rank
-        # self.args = args
 
         self.conv_x1 = nn.Conv2d(8, nFeat, 3, 1, 1)
         self.conv_x2 = nn.Conv2d(16, nFeat, 3, 1, 1)
@@ -114,7 +113,7 @@ class AHDR(nn.Module):
 
         x1 = sub_x[:,0,...]  # (B 4 H/4 W/4)
         x3 = sub_x[:,3,...]
-        #breakpoint()
+        
         # ForkedPdb().set_trace()
         f1 = self.upscale_x1(self.conv_x1(x1)) # f1: (B 60 H/2 W/2)
         f2 = self.upscale_x2(self.conv_x2(torch.cat((sub_x[:,1,...],sub_x[:,2,...]),dim=1)))

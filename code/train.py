@@ -2,54 +2,33 @@ import os
 import argparse
 import datetime
 import json
-from pty import slave_open
+import sys
+import random
 
 import shutil
 import glob
 import importlib.util 
 import natsort
-from option import args
+import imageio.v3 as imageio
 
 import numpy as np
 
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-
 import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
-
 from torch.utils.tensorboard import SummaryWriter
 
-import sys
-import warnings
-warnings.filterwarnings("error")
-
 import dataset
-import network as network
+import network
+from option import args
 from metric import *
-from eval_test import eval_model
-from real_test import get_real_result
-import warnings 
 from util import ForkedPdb
-import imageio.v3 as imageio
 
 sys.path.append("..")
-
-train_gt_dir = '/workspace/dataset/gt_hdr_train_cropped/'
-test_gt_dir = '/workspace/dataset/gt_hdr_test/'
-train_dataset_dir = '/workspace/dataset/input_train_cropped/'
-test_dataset_dir = '/workspace/dataset/input_test/'
-
-train_bayers = [x.split('/')[-1].split('.')[0] for x in sorted(glob.glob('{}*.npy'.format(train_dataset_dir)))]
-train_gts = train_bayers.copy()
-print(f"Size of train dataset: {len(train_bayers)}")
-
-test_bayers = [x.split('/')[-1].split('.')[0] for x in sorted(glob.glob('{}*.npy'.format(test_dataset_dir)))][:40]
-test_gts = test_bayers.copy() 
-print(f"Size of test dataset: {len(test_bayers)}")
 
 def make_dir(dir_path):
     new_dir = os.path.normpath(dir_path)
@@ -68,23 +47,42 @@ def main(args):
     mp.spawn(main_worker, nprocs=world_size, args=(world_size, args))
 
 def main_worker(rank, world_size, args):
+    train_gt_dir = '/workspace/dataset/gt_hdr_train_cropped/'
+    test_gt_dir = '/workspace/dataset/origin_gt_hdr_test/'
+    train_dataset_dir = '/workspace/dataset/input_train_cropped/'
+    test_dataset_dir = '/workspace/dataset/origin_input_test/'
+
+    train_bayers = [x.split('/')[-1].split('.')[0] for x in sorted(glob.glob('{}*.npy'.format(train_dataset_dir)))]
+    train_gts = train_bayers.copy()
+    print(f"Size of train dataset: {len(train_bayers)}")
+
+    test_bayers = [x.split('/')[-1].split('.')[0] for x in sorted(glob.glob('{}*.npy'.format(test_dataset_dir)))]
+    test_gts = test_bayers.copy() 
+    print(f"Size of test dataset: {len(test_bayers)}")
+
+    # For reproducibility
     torch.autograd.set_detect_anomaly(True)
-    torch.manual_seed(777)
+    torch.manual_seed(777) 
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     np.random.seed(777)
+    random.seed(777)
+    torch.cuda.manual_seed(777)
 
     torch.distributed.init_process_group(
         backend='nccl', # Recommended backend for DDP on GPU
-        init_method=f'tcp://127.0.0.1:7777', # Port number should be empty port
+        init_method=f'tcp://127.0.0.1:7777',
         world_size=world_size,
         rank=rank)
     print(f'{rank+1}/{world_size} process initialized.')
-    num_worker = 0 # Should be 0
+        
+    num_worker = 4
+    if args.burst:
+        num_worker = 0
     batch_size = args.batch_size # per 1 process, refer total_iteration below
 
     train_dataset = dataset.Dataset(train_bayers, train_gts, train_dataset_dir, train_gt_dir, args) 
-    test_dataset = dataset.Dataset(test_bayers, test_gts, test_dataset_dir, test_gt_dir, args, is_test=True)
+    test_dataset = dataset.Dataset(test_bayers, test_gts, test_dataset_dir, test_gt_dir, args, is_test=True, is_burst=args.burst)
     TrainSampler = DistributedSampler(train_dataset, shuffle=True, drop_last=True)
     TestSampler = DistributedSampler(test_dataset, shuffle=False, drop_last=True)
 
@@ -93,7 +91,6 @@ def main_worker(rank, world_size, args):
                                                      num_workers=num_worker, pin_memory=True, sampler=TrainSampler)
     testing_generator = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, drop_last=False,
                                                      num_workers=num_worker, pin_memory=True, sampler=TestSampler)
-    print(f'testlen:{len(testing_generator)}')
 
     torch.cuda.empty_cache()
     torch.cuda.set_device(rank)
@@ -102,12 +99,12 @@ def main_worker(rank, world_size, args):
     net = DDP(net, device_ids=[rank])
 
     if args.is_resume:
-        print('resume training')
-        # Get best ckpt then load
-        #order_list = os.listdir(args.result_dir + "/ckpt")
-        #best_ckpt = natsort.natsorted(order_list)[0]
-        #print(best_ckpt)
-        checkpoint = torch.load(f'{args.result_dir}/ckpt/best_psnr_mu.pt', map_location='cpu') # 'cpu': prevent memory leakage
+        print('Resume training')
+        # Get ckpt then load
+        if args.is_train:
+            checkpoint = torch.load(f'{args.result_dir}/ckpt/last.pt', map_location='cpu') # 'cpu': prevent memory leakage
+        else:
+            checkpoint = torch.load(f'{args.result_dir}/ckpt/best_psnr_mu.pt', map_location='cpu')
         net.load_state_dict(checkpoint['model_state_dict'])
         optimizer = optim.Adam(net.parameters(), lr=args.lr)
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -116,9 +113,8 @@ def main_worker(rank, world_size, args):
         epoch = checkpoint['epoch']
         iteration = int(epoch * train_dataset.__len__() / (world_size * batch_size))
         best_loss = loss
-    
     else:
-        print('start new training')
+        print('Start new training')
         optimizer = optim.Adam(net.parameters(), lr=args.lr)
         best_loss = np.inf
         best_psnr_mu = 0
@@ -129,11 +125,10 @@ def main_worker(rank, world_size, args):
             shutil.copyfile(f'./network.py',f'{args.result_dir}/network.py')
             make_dir(f'{args.result_dir}/tb')
             make_dir(f'{args.result_dir}/ckpt')
-    
+
     writer = SummaryWriter(log_dir=f'{args.result_dir}/tb')
-    train_state = True
     total_iteration = int(args.num_epoch * train_dataset.__len__() / (world_size * batch_size))
-    save_result = False ##########
+    train_state = True
 
     print(f'Train Start on GPU {rank}')
     while train_state:
@@ -173,14 +168,7 @@ def main_worker(rank, world_size, args):
                 input_bayer, gt_hdr = data_cuda # input_bayer: (b h w 2)
                 pred_hdr = net(input_bayer).permute(0,2,3,1) # pred_hdr: (b h w c)
                 input_name = data_group[2][0]
-
-                if save_result:
-                    print(f"{input_name}")
-                    make_dir(f'./{args.result_dir}/result')
-                    imageio.imwrite(f'./{args.result_dir}/result/hdr_{input_name}.hdr', pred_hdr[0,:,:,:].detach().cpu().numpy())
-                    imageio.imwrite(f'./{args.result_dir}/result/tm_{input_name}.png',
-                                    np.uint8(np.clip(range_compressor_cuda(pred_hdr)[0,:,:,:].detach().cpu().numpy()*255.0, 0., 255.)))
-
+                    
                 # Add tensorboard image
                 if input_name in show_list:
                     pred_list.append((pred_hdr,input_name))
@@ -204,108 +192,53 @@ def main_worker(rank, world_size, args):
                 metric_list = torch.Tensor([cur_psnr, cur_ssim, cur_psnr_mu, cur_ssim_mu]).cuda(rank)
                 metric_sum_list += metric_list
 
-                valid_loss_sum += valid_loss.detach().clone()
+                valid_loss_sum += valid_loss.detach().clone()      
 
-            if not save_result:
-                for item in pred_list:
-                    visual_index = show_list.index(item[1])
-                    tm_pred_image = tm_mu_law(np.clip(item[0][0,:,:,:].detach().cpu().squeeze(0).numpy(),0,1))
-                    writer.add_image(f'pred{visual_index}', tm_pred_image, global_step=epoch, dataformats='HWC')
+            for item in pred_list:
+                visual_index = show_list.index(item[1])
+                tm_pred_image = tm_mu_law(np.clip(item[0][0,:,:,:].detach().cpu().squeeze(0).numpy(),0,1))
+                writer.add_image(f'pred{visual_index}', tm_pred_image, global_step=epoch, dataformats='HWC')
 
             dist.all_reduce(valid_loss_sum)
             dist.all_reduce(metric_sum_list)
 
-        # Show training status and tensorboard settings
+        # Show training status and save model
         if rank==0:
             valid_loss_sum = valid_loss_sum/(len(testing_generator)*world_size)
             metric_sum_list = torch.div(metric_sum_list, len(testing_generator)*world_size)
-            if save_result:
-                print(metric_sum_list)
-                print("successfully save result images")
-                dist.barrier()
-                dist.destroy_process_group()
-                return
-            else:
-                print(f'[Valid] Iter: {iteration:06d} Loss: {valid_loss_sum.item():06f} <{datetime.datetime.now()}>')
-                writer.add_scalar('loss/valid', valid_loss_sum.item(), iteration)
-                writer.add_scalar('PSNR/valid', metric_sum_list[0], iteration)
-                writer.add_scalar('PSNR-mu/valid', metric_sum_list[2], iteration)
-                writer.add_scalar('SSIM/valid', metric_sum_list[1], iteration)
-                writer.add_scalar('SSIM-mu/valid', metric_sum_list[3], iteration)
 
-                if metric_sum_list[2] > best_psnr_mu:
-                    best_psnr_mu = metric_sum_list[2]
-                    torch.save({
-                        'epoch': epoch,
-                        'model_state_dict': net.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                        'loss': best_loss,
-                        'psnr_mu' : best_psnr_mu,
-                    },f'{args.result_dir}/ckpt/best_psnr_mu.pt')
-        
-        epoch += 1
-        if epoch >= args.num_epoch: train_state=False
-        dist.barrier()
-    
-    # Last epoch
-    if rank==0:
-        writer.close()
-        torch.save({
+            print(f'[Valid] Iter: {iteration:06d} Loss: {valid_loss_sum.item():06f} <{datetime.datetime.now()}>')
+            writer.add_scalar('loss/valid', valid_loss_sum.item(), iteration)
+            writer.add_scalar('PSNR/valid', metric_sum_list[0], iteration)
+            writer.add_scalar('PSNR-mu/valid', metric_sum_list[2], iteration)
+            writer.add_scalar('SSIM/valid', metric_sum_list[1], iteration)
+            writer.add_scalar('SSIM-mu/valid', metric_sum_list[3], iteration)
+
+            # Save best model
+            if metric_sum_list[2] > best_psnr_mu:
+                best_psnr_mu = metric_sum_list[2]
+                torch.save({
                     'epoch': epoch,
                     'model_state_dict': net.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': best_loss,
                     'psnr_mu' : best_psnr_mu,
-        },f'{args.result_dir}/ckpt/last.pt')
+                },f'{args.result_dir}/ckpt/best_psnr_mu.pt')
+
+            # Save last epoch
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': net.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': best_loss,
+                'psnr_mu' : best_psnr_mu,
+            },f'{args.result_dir}/ckpt/last.pt')
         
-    dist.destroy_process_group()
-
-def evaluate(args):
-    # Import network of the saved model (when the path contains dot: "noise_0.25" is not a valid module name)
-    spec = importlib.util.spec_from_file_location(
-        name="network", 
-        location= "runs/" + args.result_dir + "/network.py",
-    )
-    network = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(network)
-    sys.modules['network'] = network
-
-    # Get best ckpt
-    order_list = os.listdir("runs/" + args.result_dir + "/ckpt")
-    order_list = natsort.natsorted(order_list)
-    if order_list[-1] == 'last.pt':
-        best_ckpt = order_list[-2]
-    else:
-        best_ckpt = order_list[-1]
-
-    rank = 0
-    torch.distributed.init_process_group(
-        backend='nccl', # Recommended backend for DDP on GPU
-        init_method=f'tcp://127.0.0.1:7777', # Port number should be empty port
-        world_size=1,
-        rank=0)
-
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda:0" if use_cuda else "cpu")
-    torch.cuda.set_device(0)
-
-    net = network.make_model(args) # from network module
-    checkpoint = torch.load(f'./runs/{args.result_dir}/ckpt/{best_ckpt}', map_location='cpu')
-    print(f"ckpt {best_ckpt} selected!")
-    net = net.cuda(rank)
-    net = DDP(net, device_ids=[rank])
-    net.load_state_dict(checkpoint['model_state_dict'])
-
-    eval_dir = make_dir(f'./runs/{args.result_dir}/result-hdrvideo')
-    # eval_model(args, net, test_bayers, test_dataset_dir, test_gt_dir, device, eval_dir)
-    get_real_result(args, net, test_bayers, test_dataset_dir, test_gt_dir, device, eval_dir)
-
+        epoch += 1
+        if epoch >= args.num_epoch: train_state = False
+        dist.barrier()
+        
     dist.destroy_process_group()
     
 if __name__=='__main__':
-    # if not args.is_train:
-    #     print('eval start')
-    #     evaluate(args)
-    # else:
-    print('train start')
     main(args)

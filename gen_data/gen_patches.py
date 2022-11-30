@@ -1,20 +1,14 @@
-import cv2
-import torch
+import os
 import numpy as np
 from glob import glob
 from natsort import natsorted
-import os
-import imageio
 from tqdm import tqdm
 
 ##### From Restormer: generate_patches_sidd.py #####
-
 patch_size = 256
 overlap = 64
 padding = 12
 
-# input_dir = os.path.join(base_dir, 'bayer')
-# gt_dir = os.path.join(base_dir, 'gt')
 base_dir = 'C:\\Users\\VCLAB\\deblur_dataset\\'
 gt_dir = os.path.join(base_dir, 'gt_hdr_train')
 bayer_dir = os.path.join(base_dir, 'input_train')
@@ -28,7 +22,6 @@ def save_files(file_):
     bayer_img = np.load(os.path.join(bayer_dir,filename))
     gt_img = np.load(os.path.join(gt_dir,filename))
     filename = os.path.splitext(os.path.split(file_)[-1])[0]
-    print(gt_img.shape)
     num_patch = 0
     w, h, _ = gt_img.shape
     w, h = bayer_img.shape
