@@ -14,8 +14,6 @@ gt_dir = os.path.join(base_dir, 'gt_hdr_train')
 bayer_dir = os.path.join(base_dir, 'input_train')
 files = natsorted(glob(os.path.join(bayer_dir, '*.npy')))
 
-print(len(files))
-
 def save_files(file_):
     filename = os.path.split(file_)[-1]
     

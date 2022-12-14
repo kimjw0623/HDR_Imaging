@@ -1,5 +1,4 @@
 import os
-import argparse
 import datetime
 import json
 import sys
@@ -7,8 +6,6 @@ import random
 
 import shutil
 import glob
-import importlib.util 
-import natsort
 import imageio.v3 as imageio
 
 import numpy as np
@@ -132,29 +129,28 @@ def main_worker(rank, world_size, args):
 
     print(f'Train Start on GPU {rank}')
     while train_state:
-        if not save_result:
-            net.train()
-            TrainSampler.set_epoch(epoch) # For random sampling differ by epoch
-            for data_group in training_generator:
-                data_cuda = [x.float().cuda(rank, non_blocking=True) for x in data_group[:2]]
-                input_bayer, gt_hdr = data_cuda
-                optimizer.zero_grad()
-                pred_hdr = net(input_bayer).permute(0,2,3,1)
-                loss = F.l1_loss(range_compressor_cuda(pred_hdr), range_compressor_cuda(gt_hdr))
+        net.train()
+        TrainSampler.set_epoch(epoch) # For random sampling differ by epoch
+        for data_group in training_generator:
+            data_cuda = [x.float().cuda(rank, non_blocking=True) for x in data_group[:2]]
+            input_bayer, gt_hdr = data_cuda
+            optimizer.zero_grad()
+            pred_hdr = net(input_bayer).permute(0,2,3,1)
+            loss = F.l1_loss(range_compressor_cuda(pred_hdr), range_compressor_cuda(gt_hdr))
 
-                cur_psnr = batch_psnr(pred_hdr, gt_hdr, 1.0)
-                cur_psnr_mu = batch_psnr_mu(pred_hdr, gt_hdr, 1.0)
+            cur_psnr = batch_psnr(pred_hdr, gt_hdr, 1.0)
+            cur_psnr_mu = batch_psnr_mu(pred_hdr, gt_hdr, 1.0)
 
-                loss.backward()
-                optimizer.step()
-                iteration += 1
-                loss_sum = loss.detach().clone()
-                dist.all_reduce(loss_sum)
-                if rank==0:
-                    print(f'[Train] Iter: {iteration:06d} / {total_iteration:06d} Loss: {loss_sum.item():06f} <{datetime.datetime.now()}>')
-                    writer.add_scalar('loss/train', loss_sum.item(), iteration)
-                    writer.add_scalar('PSNR/train', cur_psnr, iteration)
-                    writer.add_scalar('PSNR-mu/train', cur_psnr_mu, iteration)
+            loss.backward()
+            optimizer.step()
+            iteration += 1
+            loss_sum = loss.detach().clone()
+            dist.all_reduce(loss_sum)
+            if rank==0:
+                print(f'[Train] Iter: {iteration:06d} / {total_iteration:06d} Loss: {loss_sum.item():06f} <{datetime.datetime.now()}>')
+                writer.add_scalar('loss/train', loss_sum.item(), iteration)
+                writer.add_scalar('PSNR/train', cur_psnr, iteration)
+                writer.add_scalar('PSNR-mu/train', cur_psnr_mu, iteration)
 
         with torch.no_grad():
             net.eval()

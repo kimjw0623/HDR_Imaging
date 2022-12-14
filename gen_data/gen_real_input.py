@@ -1,26 +1,12 @@
-from os import listdir, path
 import os
 import numpy as np
-import imageio
 import glob
 import rawpy
 from tqdm import tqdm 
 from joblib import Parallel, delayed
 
-real_dataset_dir = '\\\\vcserver2.kaist.ac.kr\\vcpaper4\\snapshot_hdr_imaging\\cvpr\\burst_data\\1110_1'
-#'C:\\Users\\VCLAB\\cvpr\\burst\\burst_data\\1110_1'
-#'C:\\Users\\VCLAB\\deblur_dataset\\result\\burst_data'
-#'\\\\vcserver2.kaist.ac.kr\\vcpaper4\\snapshot_hdr_imaging\\cvpr\\burst_data\\1108_night'
-save_dir = '\\\\vcserver2.kaist.ac.kr\\vcpaper4\\snapshot_hdr_imaging\\cvpr\\burst_input\\suda'
-#'C:\\Users\\VCLAB\\deblur_dataset\\result\\burst_input'
-#'\\\\vcserver2.kaist.ac.kr\\vcpaper4\\snapshot_hdr_imaging\\cvpr\\burst_input\\1108_night_new'
-
-# dslr_dir = 'C:\\Users\\user\\samsung-hdr-demosaic-code\\deblur\\experiment\\dslr_images\\'
-# dslr_view_dir = 'C:\\Users\\user\\samsung-hdr-demosaic-code\\deblur\\experiment\\dslr_images_view\\'
-# new_dir = 'Z:\\data\\raw_image\\exptime\\scene8\\'
-# new_view_dir = 'Z:\\data\\raw_image\\exptime\\scene8-visual\\'
-
-# files = glob.glob(os.path.join(new_dir, '*.CR2'))[:-15]
+real_dataset_dir = 'C:\\Users\\VCLAB\\cvpr\\burst\\burst_data\\1110_1'
+save_dir = 'C:\\Users\\VCLAB\\deblur_dataset\\result\\burst_input'
 
 def make_dir(dir_path):
     new_dir = os.path.normpath(dir_path)
@@ -97,20 +83,14 @@ def generate_raw(file_):
             sum_frame += frame_group[idx,:,:,:]
         ldr_group[i,:,:,:] = sum_frame
 
-    if False:
-        output = np.clip(np.concatenate((ldr_group[0,:,:,:],ldr_group[1,:,:,:],ldr_group[3,:,:,:]),axis=-1),0,1)
-        output = np.float16(np.uint8(output*255.0))/255.0
-        np.save(f'C:/Users/VCLAB/DeepSHDR_Data/excutable_code/our_dataset/{origin_filename}.npy',output)
-    
     result = ldrs2raw(ldr_group)
     result = np.clip(result,0,1)
     np.save(f'{save_dir}\\{origin_filename}.npy',result)
 
 num_cores = 10
-file_list = [1]
-for i in file_list:
+for i in range(10):
     new_dir = f'{real_dataset_dir}\\{i}'
-    new_view_dir = f'{real_dataset_dir}\\{i}-view-suda\\'
+    new_view_dir = f'{real_dataset_dir}\\{i}-view\\'
     
     make_dir(new_view_dir)
     files = glob.glob(os.path.join(new_dir, '*.CR2'))[:-15]

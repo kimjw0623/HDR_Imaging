@@ -159,43 +159,38 @@ def compute_mask(H, W, window_size, shift_size, device):
 class TransformerBlock(nn.Module):
     """ Perform exposure alignment and self attention then combine.
 
-    Args:
+    Attributes:
         num_heads (int): # of attention head.
         window_size (tuple[int]): Spatial window size with shape of (w, c).
         layer_size (tuple[int]): Dimensions for the LayerNorm with shape of (exp_channels, H, W).
         exp_channels (int): # of input channels of each exposure.
     """
     # TODO: change variables for better understanding
-    def __init__(self, num_heads, window_size, fnum, idx, keep_query, ffn_dconv, is_shared, is_local):
+    def __init__(self, num_heads, window_size, exp_channels, idx):
         super(TransformerBlock, self).__init__()
         self.num_heads = num_heads
         self.window_size = window_size
-        self.exp_channels = fnum
-        self.scale = (fnum//num_heads)**-0.5
-        self.keep_query = keep_query
-        self.ffn_dconv = ffn_dconv
-        self.is_shared = is_shared
-        self.is_local = is_local
+        self.exp_channels = exp_channels
+        self.scale = (exp_channels//num_heads)**-0.5
 
         if idx % 2 == 1:
             self.is_mask = True
         else:
             self.is_mask = False
         
-        self.layerNorm = nn.LayerNorm(fnum) # TODO: need change to N*exp_channels
-        self.layerNorm2 = nn.LayerNorm(fnum*3) # TODO: need change to N*exp_channels
+        self.layerNorm = nn.LayerNorm(exp_channels) # TODO: need change to N*exp_channels
+        self.layerNorm2 = nn.LayerNorm(exp_channels*3) # TODO: need change to N*exp_channels
 
-        self.proj_ea = nn.Linear(fnum,fnum*3, bias=False)
+        self.proj_ea = nn.Linear(exp_channels,exp_channels*3, bias=False)
         
         self.softmax = nn.Softmax(dim=-1)
-        self.register_buffer("position_bias",
-                            self.get_sine_position_encoding(window_size[1:], fnum//2 , normalize=True))
+        self.register_buffer("position_bias", self.get_sine_position_encoding(window_size[1:], exp_channels//2 , normalize=True))
         
-        self.mlp_exp1 = Mlp_GEGLU(in_features=fnum*2, hidden_features=fnum*2,out_features=fnum, act_layer=nn.GELU)
-        self.mlp_exp2 = Mlp_GEGLU(in_features=fnum*2, hidden_features=fnum*2,out_features=fnum, act_layer=nn.GELU)
-        self.mlp_exp3 = Mlp_GEGLU(in_features=fnum*2, hidden_features=fnum*2,out_features=fnum, act_layer=nn.GELU)
+        self.mlp_exp1 = Mlp_GEGLU(in_features=exp_channels*2, hidden_features=exp_channels*2,out_features=exp_channels, act_layer=nn.GELU)
+        self.mlp_exp2 = Mlp_GEGLU(in_features=exp_channels*2, hidden_features=exp_channels*2,out_features=exp_channels, act_layer=nn.GELU)
+        self.mlp_exp3 = Mlp_GEGLU(in_features=exp_channels*2, hidden_features=exp_channels*2,out_features=exp_channels, act_layer=nn.GELU)
 
-        self.mlp2 = Mlp_GEGLU(in_features=fnum*3, hidden_features = fnum*12, out_features=fnum*3, act_layer=nn.GELU)
+        self.mlp2 = Mlp_GEGLU(in_features=exp_channels*3, hidden_features = exp_channels*12, out_features=exp_channels*3, act_layer=nn.GELU)
 
     def forward(self, x):
         """ Forward function.
@@ -273,7 +268,7 @@ class TransformerBlock(nn.Module):
             q, k, v: query, key and value vector with shape of (B*nH, nW, C).
             x_shape (tuple[int]): shape of result vector.
         Returns:
-            att_result: 
+            att_result: attention operation result with shape of (B, W, C).
         """
         B_, N, C = x_shape
         att_mat = (q * self.scale) @ k.transpose(-2, -1) # : (B*nW, nH, W, W)
@@ -290,13 +285,6 @@ class TransformerBlock(nn.Module):
 
     # From: VRT implementation
     def get_sine_position_encoding(self, HW, num_pos_feats=8*8, temperature=10000, normalize=False, scale=None):
-        '''Get sine position encoding
-        
-        Args:
-
-        Returns:
-        
-        '''
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
         if scale is None:
@@ -339,8 +327,8 @@ class HDRTransformer(nn.Module):
     """ Whole network of our network.
 
     Attributes:
-        rank (int):
-        f1_num (int):
+        rank (int): GPU rank
+        f1_num (int): channer number of feature extraction output
     """ 
     def __init__(self, rank ,fnum=32, num_blocks=[], keep_query=False, ffn_dconv=False, is_shared=False, add_level=False, is_local=False):
         super(HDRTransformer, self).__init__()
@@ -407,12 +395,6 @@ class HDRTransformer(nn.Module):
                                      nn.PixelShuffle(2),
                                      nn.Conv2d(in_channels = self.f1_num, out_channels = 3, kernel_size = (3,3), padding = 'same'))
     def forward(self, x):
-        """
-
-        Args:
-
-        Returns:
-        """
         b,h,w,c = x.shape # x: (B H W 2)
         x = rearrange(x, 'B H W C -> B C H W')
 

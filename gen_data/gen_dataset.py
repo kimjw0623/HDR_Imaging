@@ -67,22 +67,24 @@ for data_dir in glob.glob('{}*\\'.format(method_dir)):
 
     for img_name_dir in glob.glob('{}*.exr'.format(dataset_dir)):
         frame_num = int(img_name_dir.split('\\')[-1].split('_')[-1][:-4]) # read frame number
+        
+        # Select frames
         if frame_num%frame_skip != 0:
             continue
-
-        # image name w/ frame number
+            
+        # Image name w/ frame number
         img_name = img_name_dir.split('\\')[-1][:-4]
-        # image name w/o frame number
+        # Image name w/o frame number
         short_name = img_name_dir.split('\\')[-1][:-11]
         
-        # ground-truth HDR frame
+        # Ground-truth HDR frame
         target_frame = imageio.imread('{}{}.exr'.format(dataset_dir,img_name))
         gt_frame = target_frame.copy()
         img_h,img_w,_ = target_frame.shape
         cur_frame_num = frame_num
         exp0 = np.clip(target_frame.copy(),0,MAXVALUE)
         
-        # get peak value
+        # Get pre-calculated peak value
         target_frame_peak = foot_dict[scene_name]
         
         # GT dataset: [0,1] range
