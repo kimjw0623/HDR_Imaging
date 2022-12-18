@@ -6,7 +6,6 @@ runs
 .DS_Store
 .idea
 *.pt
-*.png
 *.bmp
 *.pyc
 *.pth
