@@ -6,7 +6,6 @@ We create a dataset of quad Bayer sensor input with varying exposures and colors
 [Presentation file](https://drive.google.com/file/d/1sJswcXjly7GI8QgXUr1gs9F5Adcq33TW/view?usp=share_link) (Google Drive)
 
 ## Results
----
 
 ### Quantitative Results For Synthetic Dataset
 
@@ -55,7 +54,7 @@ conda activate pytorch190
 3. Install dependencies
 ```
 conda install pytorch==1.9.0 torchvision==0.10.0 torchaudio==0.9.0 cudatoolkit=10.2 -c pytorch
-pip install -r 'requirements.txt'
+pip install -r "requirements.txt"
 ```
 
 ## Demo
