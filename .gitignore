@@ -5,8 +5,4 @@ __pycache__
 .DS_Store
 .idea
 *.pt
-*.bmp
-*.pyc
 *.pth
-*.hdr
-
