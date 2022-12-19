@@ -7,22 +7,16 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-import torch.multiprocessing as mp
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data.distributed import DistributedSampler
-from torch.utils.tensorboard import SummaryWriter
 
 import dataset
 import network
 from option import args
 from metric import *
-from util import ForkedPdb
 
 def main():
     print('Demo')
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    net = network.make_model(args).cuda(dev)
+    net = network.make_model(args,0).cuda(dev)
 
     # Load pre-trained model
     checkpoint = torch.load(f'{args.result_dir}/ckpt/best_psnr_mu.pt', map_location='cpu')
