@@ -36,7 +36,7 @@ Or you can just pull official docker image from Dockerhub and istall dependencie
 ```
 docker pull pytorch/pytorch:1.9.0-cuda10.2-cudnn7-runtime
 git clone https://github.com/kimjw0623/HDR_Imaging.git
-pip install -r 'requirements.txt'
+pip install -r "requirements.txt"
 ```
 
 Follow these instructions:
