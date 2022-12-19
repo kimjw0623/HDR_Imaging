@@ -1,5 +1,4 @@
 __pycache__
-runs
 .history/
 .vscode/
 
@@ -11,6 +10,3 @@ runs
 *.pth
 *.hdr
 
-# Test files
-sandbox.py
-*.0
