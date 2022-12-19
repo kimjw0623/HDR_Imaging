@@ -35,6 +35,7 @@ This repository is built in Pytorch 1.9.0 and tested on Ubuntu 16.04 enviornment
 Or you can just pull official docker image from Dockerhub and istall dependencies:
 ```
 docker pull pytorch/pytorch:1.9.0-cuda10.2-cudnn7-runtime
+git clone https://github.com/kimjw0623/HDR_Imaging.git
 pip install -r 'requirements.txt'
 ```
 

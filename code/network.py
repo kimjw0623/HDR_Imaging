@@ -108,6 +108,8 @@ class Mlp_GEGLU(nn.Module):
 ##########################################################################
 ## Resizing modules
 class Downsample(nn.Module):
+    """ Downscale spatial resolution of input feature vector by 2.
+    """
     def __init__(self, n_feat):
         super(Downsample, self).__init__()
         self.body = nn.Sequential(nn.Conv2d(n_feat, n_feat//2, kernel_size=3, stride=1, padding=1),
@@ -120,6 +122,8 @@ class Downsample(nn.Module):
         return x
 
 class Upsample(nn.Module):
+    """ Upscale spatial resolution of input feature vector by 2.
+    """
     def __init__(self, n_feat):
         super(Upsample, self).__init__()
         self.body = nn.Sequential(nn.Conv2d(n_feat, n_feat*2, kernel_size=3, stride=1, padding=1),
@@ -137,7 +141,12 @@ def compute_mask(H, W, window_size, shift_size, device):
     Args:
         H (int): Height of feature vector.
         W (int): Width of feature vector.
+        window_size (tuple[int]): Spatial window size with shape of (w, c).
+        shift_size (tuple[int]): Number of pixels to shift for swin transformer.
+        device: Current GPU
 
+    Returns:
+        attn_mask: Spatial mask for swin transformer.
     """
     pad_b = (window_size[0] - H % window_size[0]) % window_size[0]
     pad_r = (window_size[0] - W % window_size[0]) % window_size[0]
@@ -196,7 +205,10 @@ class TransformerBlock(nn.Module):
         """ Forward function.
 
         Args:
-            x: input features with shape of (B, 3, C, H, W).
+            x: Input features with shape of (B, 3, C, H, W).
+        
+        Returns:
+            x: Restored features with shape of (B, 3, C, H, W).
         """
         B,_,C,H,W = x.shape
         x_origin = x
@@ -267,6 +279,7 @@ class TransformerBlock(nn.Module):
         Args:
             q, k, v: query, key and value vector with shape of (B*nH, nW, C).
             x_shape (tuple[int]): shape of result vector.
+            
         Returns:
             att_result: attention operation result with shape of (B, W, C).
         """
