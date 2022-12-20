@@ -2,8 +2,14 @@
 
 <img src="static/teaser.PNG" width="40%" height="50%" title="teaser"></img>
 
-Our network restores HDR images from quad Bayer patterned sensor images in an end to end manner.
-We create a dataset of quad Bayer sensor input with varying exposures and colors using the existing HDR video dataset.
+### Challenges
+
+The spatially-varying exposure input has low spatial resolution and has different motion blur for each exposure level. (See (b).)
+
+Our network restores HDR images (c) from quad Bayer patterned sensor images (a) in an end-to-end manner.
+We jointly solve demosaicing and deblurring problems to achieve a high-quality snapshot HDR image from the quad-Bayer pattern.
+
+Also, we create a dataset of quad Bayer sensor input with varying exposures and colors using the existing HDR video dataset.
 
 [Presentation file](https://drive.google.com/file/d/1sJswcXjly7GI8QgXUr1gs9F5Adcq33TW/view?usp=share_link) (Google Drive)
 
@@ -11,7 +17,7 @@ We create a dataset of quad Bayer sensor input with varying exposures and colors
 
 ### Quantitative Results For Synthetic Dataset
 
-<img src="static/quantitative_syn.PNG" width="70%" height="50%" title="quantitative_syn"></img>
+<img src="static/quantitative_syn.PNG" width="60%" height="50%" title="quantitative_syn"></img>
 
 ### Qualitative Results For Synthetic Dataset
 
@@ -26,6 +32,12 @@ Quantitative and qualitative results of our model. Our model outperforms baselin
 ## Methods
 
 <img src="static/network.PNG" width="100%" height="50%" title="network"></img>
+
+Our method consists of two main modules: 
+
+(a) HDR feature extraction module: demosaicing and upscaling
+
+(b) HDR feature registration module: motion blur registration
 
 ## Installation
 
