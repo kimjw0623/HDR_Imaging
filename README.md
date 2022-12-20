@@ -4,7 +4,7 @@
 
 ### Challenges
 
-The spatially-varying exposure input has low spatial resolution and has different motion blur for each exposure level. (See (b).)
+The spatially-varying exposure input has low spatial resolution and different motion blur for each exposure level (b).
 
 Our network restores HDR images (c) from quad Bayer patterned sensor images (a) in an end-to-end manner.
 We jointly solve demosaicing and deblurring problems to achieve a high-quality snapshot HDR image from the quad-Bayer pattern.
