@@ -1,5 +1,7 @@
 # Demosaicing a Time-Varying Exposures Array for Snapshot HDR Imaging
 
+<img src="static/teaser.PNG" width="30%" height="50%" title="teaser"></img>
+
 Our network restores HDR images from quad Bayer patterned sensor images in an end to end manner.
 We create a dataset of quad Bayer sensor input with varying exposures and colors using the existing HDR video dataset.
 
@@ -22,8 +24,6 @@ We create a dataset of quad Bayer sensor input with varying exposures and colors
 Quantitative and qualitative results of our model. Our model outperforms baseline methods in terms of color reconstruction and denoising, particularly in the area with strong motion blur.
 
 ## Methods
-
-<img src="static/teaser.PNG" width="50%" height="50%" title="teaser"></img>
 
 <img src="static/network.PNG" width="100%" height="50%" title="network"></img>
 
