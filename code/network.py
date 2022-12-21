@@ -60,7 +60,6 @@ class RCAB(nn.Module):
 class ResidualGroup(nn.Module):
     def __init__(self, conv, n_feat, kernel_size, reduction, n_resblocks):
         super(ResidualGroup, self).__init__()
-        modules_body = []
         modules_body = [
             RCAB(
                 conv, n_feat, kernel_size, reduction, bias=True, bn=False, act=nn.ReLU(True), res_scale=1) \
@@ -464,7 +463,7 @@ class HDRTransformer(nn.Module):
             x_scale21 = self.transformerBlock21(x_scale21)
 
         # HDR reconstruction
-        x = self.conv_last(rearrange(x + x_scale11_out, 'B E C H W -> B (E C) H W'))
+        x = self.conv_last(rearrange(x + x_scale21, 'B E C H W -> B (E C) H W'))
         x = self.upscale(x)
         x = torch.sigmoid(x)
 

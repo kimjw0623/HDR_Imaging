@@ -34,6 +34,6 @@ def load_ckpt_ddp(net, ckpt_path, device):
             net.load_state_dict(ckpt_ddp)
         else:
             net.load_state_dict(ckpt)
-        print('# Checkpoint loaded!')
+        print('Checkpoint loaded!')
     else:
         raise ValueError('No checkpoint exists')

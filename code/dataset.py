@@ -28,11 +28,11 @@ class Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         bayer_id = self.bayer_ids[index]
+        gt_id = self.gt_ids[index]
         if self.is_burst:
             input_bayer = self._load_burst_input(bayer_id)
         else:
-            input_bayer, gt_hdr = self._load_file(bayer_id)
-            print(gt_hdr.shape,input_bayer.shape)
+            input_bayer, gt_hdr = self._load_file(bayer_id, gt_id)
             if self.is_test:
                 input_bayer = input_bayer[12:-12,16:-16]
                 gt_hdr = gt_hdr[12:-12,16:-16,:]
@@ -67,9 +67,9 @@ class Dataset(torch.utils.data.Dataset):
 
         return input_bayer, gt_hdr, bayer_id
     
-    def _load_file(self, bayer_id):
+    def _load_file(self, bayer_id, gt_id):
         bayer_name = '{}/{}.npy'.format(self.bayer_path,bayer_id)
-        gt_name = '{}/{}.npy'.format(self.gt_path,bayer_id)
+        gt_name = '{}/{}.npy'.format(self.gt_path,gt_id)
         bayer = np.load(bayer_name,allow_pickle=True)
         gt = np.load(gt_name,allow_pickle=True)
         return bayer, gt
