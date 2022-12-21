@@ -11,6 +11,17 @@ We jointly solve demosaicing and deblurring problems to achieve a high-quality s
 
 Also, we create a dataset of quad Bayer sensor input with varying exposures and colors using the existing HDR video dataset.
 
+### Abstraction
+
+> Spatial resolution of an image sensor has increased significantly, allowing us to capture additional information, such as spatially-varying multiple exposures. Quad-Bayer patterned sensors have become popular, enabling snapshot HDR imaging.
+> However, the quad-Bayer pattern compromises spatial resolution for multiple exposures and colors in results. Also, the general quad-Bayer sensor controls exposures by gain rather than the actual exposure time, and thus the extension of dynamic range has been insignificant.
+> While time-varying multiple exposures are desirable for high-quality HDR imaging, it is inapplicable to dynamic scenes in general, requiring an additional deghosting method. 
+> In this work, we propose a snapshot HDR demosaicing method, which takes time-varying multiple exposures as input and jointly solves both demosaicing and deghosting problems from the quad-Bayer patterned input. 
+> Our method consists of a feature-extraction module to handle mosaiced multiple exposures and a U-net style multiscale transformer module to register spatial displacements of multiple exposures and colors to obtain a high-quality HDR image from a quad-Bayer RAW image. 
+> We create a dataset of quad-Bayer sensor input with varying exposures and colors and train our network using our dataset.
+> Results validate that our method outperforms baseline HDR reconstruction methods with both synthetic and real datasets.
+
+
 [Presentation file](https://drive.google.com/file/d/1sJswcXjly7GI8QgXUr1gs9F5Adcq33TW/view?usp=share_link) (Google Drive)
 
 ## Results
