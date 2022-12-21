@@ -6,7 +6,7 @@
 
 The spatially-varying exposure input has low spatial resolution and different motion blur for each exposure level (b).
 
-Our network restores HDR images (c) from quad Bayer patterned sensor images (a) in an end-to-end manner.
+Our network restores HDR images (c) from [quad Bayer patterned sensor](https://semiconductor.samsung.com/image-sensor/mobile-image-sensor/isocell-gn1/) images (a) in an end-to-end manner.
 We jointly solve demosaicing and deblurring problems to achieve a high-quality snapshot HDR image from the quad-Bayer pattern.
 
 Also, we create a dataset of quad Bayer sensor input with varying exposures and colors using the existing HDR video dataset.
