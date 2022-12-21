@@ -32,7 +32,7 @@ class Dataset(torch.utils.data.Dataset):
             input_bayer = self._load_burst_input(bayer_id)
         else:
             input_bayer, gt_hdr = self._load_file(bayer_id)
-
+            print(gt_hdr.shape,input_bayer.shape)
             if self.is_test:
                 input_bayer = input_bayer[12:-12,16:-16]
                 gt_hdr = gt_hdr[12:-12,16:-16,:]

@@ -97,26 +97,19 @@ def main_worker(rank, world_size, args):
 
     if args.is_resume:
         print('Resume training')
-        # Get ckpt then load
-        if args.is_train:
-            checkpoint = torch.load(f'{args.result_dir}/ckpt/last.pt', map_location='cpu') # 'cpu': prevent memory leakage
-        else:
-            checkpoint = torch.load(f'{args.result_dir}/ckpt/best_psnr_mu.pt', map_location='cpu')
+        # Get latest ckpt then load
+        checkpoint = torch.load(f'{args.result_dir}/ckpt/last.pt', map_location='cpu') # 'cpu': prevent memory leakage
         net.load_state_dict(checkpoint['model_state_dict'])
         optimizer = optim.Adam(net.parameters(), lr=args.lr)
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        loss = checkpoint['loss']
-        best_psnr_mu = checkpoint['psnr_mu']
-        epoch = checkpoint['epoch']
+        loss, best_psnr_mu, epoch = checkpoint['loss'], checkpoint['psnr_mu'], checkpoint['epoch']
         iteration = int(epoch * train_dataset.__len__() / (world_size * batch_size))
         best_loss = loss
     else:
         print('Start new training')
         optimizer = optim.Adam(net.parameters(), lr=args.lr)
         best_loss = np.inf
-        best_psnr_mu = 0
-        epoch = 0
-        iteration = 0
+        best_psnr_mu, epoch, iteration = 0, 0, 0
         if rank==0:
             make_dir(f'{args.result_dir}')
             shutil.copyfile(f'./network.py',f'{args.result_dir}/network.py')

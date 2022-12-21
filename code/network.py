@@ -195,9 +195,9 @@ class TransformerBlock(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
         self.register_buffer("position_bias", self.get_sine_position_encoding(window_size[1:], exp_channels//2 , normalize=True))
         
-        self.mlp_exp1 = Mlp_GEGLU(in_features=exp_channels*2, hidden_features=exp_channels*2,out_features=exp_channels, act_layer=nn.GELU)
-        self.mlp_exp2 = Mlp_GEGLU(in_features=exp_channels*2, hidden_features=exp_channels*2,out_features=exp_channels, act_layer=nn.GELU)
-        self.mlp_exp3 = Mlp_GEGLU(in_features=exp_channels*2, hidden_features=exp_channels*2,out_features=exp_channels, act_layer=nn.GELU)
+        self.mlp_exp1 = Mlp_GEGLU(in_features=exp_channels*2, hidden_features=exp_channels*3,out_features=exp_channels, act_layer=nn.GELU)
+        self.mlp_exp2 = Mlp_GEGLU(in_features=exp_channels*2, hidden_features=exp_channels*3,out_features=exp_channels, act_layer=nn.GELU)
+        self.mlp_exp3 = Mlp_GEGLU(in_features=exp_channels*2, hidden_features=exp_channels*3,out_features=exp_channels, act_layer=nn.GELU)
 
         self.mlp2 = Mlp_GEGLU(in_features=exp_channels*3, hidden_features = exp_channels*12, out_features=exp_channels*3, act_layer=nn.GELU)
 
@@ -380,24 +380,19 @@ class HDRTransformer(nn.Module):
             self.sr_deconv = nn.ConvTranspose2d(self.f1_num, self.f1_num, kernel_size = (3,3), stride = 2, padding = 1, output_padding=1)
 
         # Transformer part
-        self.transformerBlock11 = nn.Sequential(*[TransformerBlock(num_heads=heads[0], window_size=window_size, fnum=self.f1_num, idx=i, keep_query=keep_query, ffn_dconv=ffn_dconv, is_shared=is_shared, is_local=is_local) 
-                                            for i in range(num_blocks[0])])
+        self.transformerBlock11 = nn.Sequential(*[TransformerBlock(num_heads=heads[0], window_size=window_size, exp_channels=self.f1_num, idx=i) for i in range(num_blocks[0])])
         if self.multi_scale:
             self.down1 = Downsample(self.f1_num)                                
-            self.transformerBlock12 = nn.Sequential(*[TransformerBlock(num_heads=heads[1], window_size=window_size, fnum=self.f1_num*2, idx=i, keep_query=keep_query, ffn_dconv=ffn_dconv, is_shared=is_shared, is_local=is_local)  
-                                                for i in range(num_blocks[1])])
+            self.transformerBlock12 = nn.Sequential(*[TransformerBlock(num_heads=heads[1], window_size=window_size, exp_channels=self.f1_num*2, idx=i) for i in range(num_blocks[1])])
             self.down2 = Downsample(self.f1_num * 2)
 
-            self.transformerBlock13 = nn.Sequential(*[TransformerBlock(num_heads=heads[2], window_size=window_size, fnum=self.f1_num*4, idx=i, keep_query=keep_query, ffn_dconv=ffn_dconv, is_shared=is_shared, is_local=is_local) 
-                                                for i in range(num_blocks[2])])                                    
+            self.transformerBlock13 = nn.Sequential(*[TransformerBlock(num_heads=heads[2], window_size=window_size, exp_channels=self.f1_num*4, idx=i) for i in range(num_blocks[2])])                                    
             self.up2 = Upsample(self.f1_num * 4)
 
-            self.transformerBlock22 = nn.Sequential(*[TransformerBlock(num_heads=heads[1], window_size=window_size, fnum=self.f1_num*2, idx=i, keep_query=keep_query, ffn_dconv=ffn_dconv, is_shared=is_shared, is_local=is_local) 
-                                                for i in range(num_blocks[1])])
+            self.transformerBlock22 = nn.Sequential(*[TransformerBlock(num_heads=heads[1], window_size=window_size, exp_channels=self.f1_num*2, idx=i) for i in range(num_blocks[1])])
             self.up1 = Upsample(self.f1_num * 2)
 
-            self.transformerBlock21 = nn.Sequential(*[TransformerBlock(num_heads=heads[0], window_size=window_size, fnum=self.f1_num, idx=i, keep_query=keep_query, ffn_dconv=ffn_dconv, is_shared=is_shared, is_local=is_local) 
-                                                for i in range(num_blocks[0])])
+            self.transformerBlock21 = nn.Sequential(*[TransformerBlock(num_heads=heads[0], window_size=window_size, exp_channels=self.f1_num, idx=i) for i in range(num_blocks[0])])
             
             self.reduce_chan_level2 = nn.Conv2d(self.f1_num*4, self.f1_num*2, kernel_size=1, bias=False)
             self.reduce_chan_level1 = nn.Conv2d(self.f1_num*2, self.f1_num, kernel_size=1, bias=False)
