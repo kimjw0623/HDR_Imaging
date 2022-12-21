@@ -40,15 +40,9 @@ Also, we create a dataset of quad Bayer sensor input with varying exposures and 
 
 Quantitative and qualitative results of our model. Our model outperforms baseline methods in terms of color reconstruction and denoising, particularly in the area with strong motion blur.
 
-## Methods
+## Network Architecture
 
 <img src="static/network.PNG" width="100%" height="50%" title="network"></img>
-
-Our method consists of two main modules: 
-
-(a) HDR feature extraction module: demosaicing and upscaling
-
-(b) HDR feature registration module: motion blur registration
 
 ## Installation
 
