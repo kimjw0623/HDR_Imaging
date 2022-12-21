@@ -77,5 +77,6 @@ pip install -r "requirements.txt"
 ## Demo
 To test pre-trained models, run below code:
 ```
+cd code
 python test.py
 ```
