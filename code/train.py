@@ -57,15 +57,6 @@ def main_worker(rank, world_size, args):
     test_gts = test_bayers.copy() 
     print(f"Size of test dataset: {len(test_bayers)}")
 
-    # For reproducibility
-    torch.autograd.set_detect_anomaly(True)
-    torch.manual_seed(777) 
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    np.random.seed(777)
-    random.seed(777)
-    torch.cuda.manual_seed(777)
-
     torch.distributed.init_process_group(
         backend='nccl', # Recommended backend for DDP on GPU
         init_method=f'tcp://127.0.0.1:7777',
