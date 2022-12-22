@@ -75,9 +75,7 @@ pip install -r "requirements.txt"
 ```
 
 ## Demo
-First download our [pretrained model](https://drive.google.com/file/d/19W4kWG1YngX10CCT-f9rn7TdqIIpunjc/view?usp=sharing).
-
-Put best_psnr_mu.pt file in `/code/models/`.
+First download our [pretrained model](https://drive.google.com/file/d/19W4kWG1YngX10CCT-f9rn7TdqIIpunjc/view?usp=sharing) and put best_psnr_mu.pt file in `/code/models/`.
 
 To test pre-trained models, run below code:
 ```
