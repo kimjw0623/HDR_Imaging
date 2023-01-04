@@ -241,14 +241,14 @@ class TransformerBlock(nn.Module):
         exposure_att3 = self.attention(qkv_ea[1,0], qkv_ea[2,1], qkv_ea[2,2], (B_//3, W_, C_), mask = attn_mask)
         # Exp level 1
         exposure_att2to1 = self.attention(qkv_ea[0,0], qkv_ea[1,1], qkv_ea[1,2], (B_//3, W_, C_), mask = attn_mask)
-        exposure_att2to1_1 = self.attention(qkv_ea[0,0], qkv_ea[2,1], qkv_ea[2,2], (B_//3, W_, C_), mask = attn_mask)
+        exposure_att3to1 = self.attention(qkv_ea[0,0], qkv_ea[2,1], qkv_ea[2,2], (B_//3, W_, C_), mask = attn_mask)
         # Exp level 3
         exposure_att2to3 = self.attention(qkv_ea[2,0], qkv_ea[1,1], qkv_ea[1,2], (B_//3, W_, C_), mask = attn_mask)
-        exposure_att2to3_1 = self.attention(qkv_ea[2,0], qkv_ea[0,1], qkv_ea[0,2], (B_//3, W_, C_), mask = attn_mask)
+        exposure_att1to3 = self.attention(qkv_ea[2,0], qkv_ea[0,1], qkv_ea[0,2], (B_//3, W_, C_), mask = attn_mask)
 
         hidden_exp2 = self.mlp_exp2(torch.cat((exposure_att1, exposure_att3), dim = -1)) # : (B*nW, W, c)
-        hidden_exp1 = self.mlp_exp1(torch.cat((exposure_att2to1, exposure_att2to1_1), dim = -1))
-        hidden_exp3 = self.mlp_exp3(torch.cat((exposure_att2to3, exposure_att2to3_1), dim=-1))
+        hidden_exp1 = self.mlp_exp1(torch.cat((exposure_att2to1, exposure_att3to1), dim = -1))
+        hidden_exp3 = self.mlp_exp3(torch.cat((exposure_att2to3, exposure_att1to3), dim=-1))
         
         x = torch.cat((hidden_exp1, hidden_exp2, hidden_exp3), dim = 0)
         x = x.view(3, B, Hp//self.window_size[0], Wp//self.window_size[1], 
